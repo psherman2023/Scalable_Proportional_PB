@@ -1,0 +1,2 @@
+most_efficient_project_set,highest_efficiency_attained,final_project_set,final_efficiency,budget_increase_count,len_budget_increase_list,max_budget_increase,min_budget_increase,avg_budget_increase,monotonic_violation
+"OrderedDict([(206, mpq(223,1)), (832, mpq(148,1)), (2490, mpq(140,1)), (2486, mpq(134,1)), (560, mpq(128,1)), (544, mpq(123,1))])",1,"OrderedDict([(206, mpq(223,1)), (832, mpq(148,1)), (2490, mpq(140,1)), (2486, mpq(134,1)), (560, mpq(128,1)), (544, mpq(123,1))])",1,2,2,15400/67,981781538971/19550513472,366857270579857/2619768805248,0

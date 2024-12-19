@@ -1,6 +1,6 @@
 from pabutools.election import parse_pabulib
 from pabutools.rules import method_of_equal_shares, exhaustion_by_budget_increase
-from pabutools.election import Instance, ApprovalProfile, Cardinality_Sat
+from pabutools.election import Instance, ApprovalProfile, Cost_Sat
 import pandas as pd
 import os
 from pathlib import Path
@@ -31,40 +31,56 @@ def run_mes_with_exhaustion(pabulib_file: str, budget: int = 0) -> pd.DataFrame:
     instance.budget_limit = int(instance.budget_limit)
 
     # Run MES with budget exhaustion
-    result = exhaustion_by_budget_increase(
-        instance=instance,
-        profile=profile,
-        rule=method_of_equal_shares,
-        rule_params={
-            "sat_class": Cardinality_Sat,
-            "analytics": True
-        },
-        resoluteness=True,
-        budget_step=int(0.01 * instance.budget_limit),  # 1% step size
-        exhaustive_stop=True
-    )
+    # stopper = True
+    increase_counter = 0
+    best_efficiency = 0
+    non_mono_flag = 0
+    non_mono_is_true = 0
+    print("result")
+    while True:
+        result = method_of_equal_shares(
+            instance=instance,
+            profile=profile,
+            sat_class = Cost_Sat,
+        )
+        
+        total_cost = sum(p.cost for p in result)
+        if len(result) == len(instance): #all projects selected
+            break
+        efficiency = total_cost / initial_budget
+        if efficiency < 1 and efficiency > best_efficiency:
+            best_efficiency = efficiency
+            if non_mono_flag:
+                non_mono_is_true = 1
+        if efficiency > 1:
+            non_mono_flag = 1
+        increase_counter+=1
+        print(f"Increase counter {increase_counter}")
+        print(f"efficiency {efficiency}")
+        instance.budget_limit = instance.budget_limit+1
 
-    # Calculate efficiency metrics
-    total_cost = sum(p.cost for p in result)
-    efficiency = total_cost / initial_budget
+    #     # Calculate efficiency metrics
+    # total_cost = sum(p.cost for p in result)
+    # efficiency = total_cost / initial_budget
 
-    # Get budget increases from the details
-    if hasattr(result, "details") and result.details is not None:
-        budget_increases = [
-            int((instance.budget_limit - initial_budget) / len(profile))
-            for iteration in result.details.iterations
-        ]
-        print(result.details.iterations)
-        budget_increase_count = len(budget_increases)
-        max_increase = max(budget_increases) if budget_increases else 0
-        min_increase = min(budget_increases) if budget_increases else 0
-        avg_increase = sum(budget_increases) / len(budget_increases) if budget_increases else 0
-    else:
-        budget_increase_count = 0
-        max_increase = 0
-        min_increase = 0
-        avg_increase = 0
-
+    # # Get budget increases from the details
+    # if hasattr(result, "details") and result.details is not None:
+    #     budget_increases = [
+    #         int((instance.budget_limit - initial_budget) / len(profile))
+    #         for iteration in result.details.iterations
+    #     ]
+    #     print("ResuLTS")
+    #     print(result.details.iterations)
+    #     budget_increase_count = len(budget_increases)
+    #     max_increase = max(budget_increases) if budget_increases else 0
+    #     min_increase = min(budget_increases) if budget_increases else 0
+    #     avg_increase = sum(budget_increases) / len(budget_increases) if budget_increases else 0
+    # else:
+    #     budget_increase_count = increase_counter
+    max_increase = 0
+    min_increase = 0
+    avg_increase = 0
+    budget_increase_count = increase_counter
     # Create results DataFrame
     data = {
         'selected_projects': [list(result)],
@@ -73,7 +89,9 @@ def run_mes_with_exhaustion(pabulib_file: str, budget: int = 0) -> pd.DataFrame:
         'max_budget_increase': [max_increase],
         'min_budget_increase': [min_increase],
         'avg_budget_increase': [avg_increase],
+        'non_mono': [non_mono_is_true],
     }
+    
     
     return pd.DataFrame(data)
 
@@ -98,7 +116,7 @@ if __name__ == "__main__":
         base_dir = input_path.parent
         
     # /data/coml-humanchess/univ5678/results/waterflow_equal_shares/cost/mes_waterflow_exhaustive_results_cost
-    results_dir = base_dir / "results/waterflow_equal_shares/cost/mes_waterflow_exhaustive_results_cost"
+    results_dir = base_dir / "results/waterflow_equal_shares/cost/mes_waterflow_non_exhaustive_results_cost"
     
     try:
         # Create results directory with parents and proper permissions

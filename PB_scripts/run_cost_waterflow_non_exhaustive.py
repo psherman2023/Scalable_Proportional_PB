@@ -1,17 +1,18 @@
 from pabutools.election import parse_pabulib
-from pabutools.rules import method_of_equal_shares
-from pabutools.election import Cardinality_Sat
+from pabutools.rules import method_of_equal_shares, exhaustion_by_budget_increase
+from pabutools.election import Instance, ApprovalProfile, Cost_Sat
 import pandas as pd
-import sys
 import os
 from pathlib import Path
+import sys
 
-def run_mes_once(pabulib_file: str) -> pd.DataFrame:
+def run_mes_with_exhaustion(pabulib_file: str, budget: int = 0) -> pd.DataFrame:
     """
-    Run the Method of Equal Shares (MES) once and return detailed results.
+    Run the Method of Equal Shares with budget exhaustion.
     
     Args:
         pabulib_file (str): Path to Pabulib file
+        budget (int): Optional custom budget (defaults to instance budget if 0)
         
     Returns:
         pd.DataFrame: Results dataframe containing the allocation details
@@ -19,27 +20,60 @@ def run_mes_once(pabulib_file: str) -> pd.DataFrame:
     # Parse the instance and profile
     instance, profile = parse_pabulib(pabulib_file)
     
+    # Set custom budget if provided
+    if budget > 0:
+        initial_budget = int(budget)
+        instance.budget_limit = int(budget)
+    else:
+        initial_budget = int(instance.budget_limit)
+
     # Ensure budget is an integer
     instance.budget_limit = int(instance.budget_limit)
-    
-    # Run MES
-    result = method_of_equal_shares(
-        instance=instance,
-        profile=profile,
-        sat_class=Cardinality_Sat,
-        analytics=True
-    )
-    
-    # Calculate efficiency metrics
-    total_cost = sum(p.cost for p in result)
-    efficiency = total_cost / instance.budget_limit if instance.budget_limit > 0 else None
-    
-    # No budget increases since we are not using exhaustion
-    budget_increase_count = 0
+
+    # Run MES with budget exhaustion
+    # stopper = True
+    increase_counter = 0
+    print("result")
+    while True:
+        result = method_of_equal_shares(
+            instance=instance,
+            profile=profile,
+            sat_class = Cost_Sat,
+        )
+        
+        total_cost = sum(p.cost for p in result)
+        if total_cost > initial_budget:
+            break
+        if len(result) == len(instance): #all projects selected
+            break
+        efficiency = total_cost / initial_budget
+        increase_counter+=1
+        print(f"Increase counter {increase_counter}")
+        print(f"efficiency {efficiency}")
+        instance.budget_limit = instance.budget_limit+1
+
+    #     # Calculate efficiency metrics
+    # total_cost = sum(p.cost for p in result)
+    # efficiency = total_cost / initial_budget
+
+    # # Get budget increases from the details
+    # if hasattr(result, "details") and result.details is not None:
+    #     budget_increases = [
+    #         int((instance.budget_limit - initial_budget) / len(profile))
+    #         for iteration in result.details.iterations
+    #     ]
+    #     print("ResuLTS")
+    #     print(result.details.iterations)
+    #     budget_increase_count = len(budget_increases)
+    #     max_increase = max(budget_increases) if budget_increases else 0
+    #     min_increase = min(budget_increases) if budget_increases else 0
+    #     avg_increase = sum(budget_increases) / len(budget_increases) if budget_increases else 0
+    # else:
+    #     budget_increase_count = increase_counter
     max_increase = 0
     min_increase = 0
     avg_increase = 0
-    
+    budget_increase_count = increase_counter
     # Create results DataFrame
     data = {
         'selected_projects': [list(result)],
@@ -54,7 +88,7 @@ def run_mes_once(pabulib_file: str) -> pd.DataFrame:
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: python run_mes_once.py <file_path>")
+        print("Usage: python run_mes_exhaustion.py <file_path>")
         sys.exit(1)
     
     file_path = sys.argv[1]
@@ -72,7 +106,8 @@ if __name__ == "__main__":
     else:
         base_dir = input_path.parent
         
-    results_dir = base_dir / "results/waterflow_equal_shares/cost/mes_results_non_exhaustive_cost"
+    # /data/coml-humanchess/univ5678/results/waterflow_equal_shares/cost/mes_waterflow_exhaustive_results_cost
+    results_dir = base_dir / "results/waterflow_equal_shares/cost/mes_waterflow_non_exhaustive_results_cost"
     
     try:
         # Create results directory with parents and proper permissions
@@ -82,7 +117,7 @@ if __name__ == "__main__":
         print(f"Processing file: {input_path}")
         print(f"Results will be saved to: {results_dir / f'{input_path.stem}.csv'}")
         
-        output_df = run_mes_once(str(input_path))
+        output_df = run_mes_with_exhaustion(str(input_path))
         
         # Save results with error handling
         try:
@@ -93,7 +128,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Error saving results to {output_path}: {str(e)}")
             # Try alternative location if original fails
-            fallback_path = Path.home() / "mes_results" / f"{input_path.stem}.csv"
+            fallback_path = Path.home() / "slurm_results" / f"{input_path.stem}.csv"
             fallback_path.parent.mkdir(parents=True, exist_ok=True)
             output_df.to_csv(fallback_path, index=False)
             print(f"Results saved to fallback location: {fallback_path}")
